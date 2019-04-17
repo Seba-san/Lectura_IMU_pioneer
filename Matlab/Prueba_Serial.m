@@ -3,8 +3,9 @@
 % Formato de la trama
 %[Cabecera][Timestamp (us)][13 x datos]
 % son todos enteros sin signo de 16bits
-Cantidad_lectura=10; % Datos leidos por bloque.
-Cantidad_datos=15; % Datos por trama
+Cantidades.lectura=50; % Datos leidos por bloque.
+Cantidades.datos=15; % Datos por trama
+Cantidades.tiempo=20; % Tiempo de lectura en segundos. Este tiempo determina el tamaño del archivo .mat
 t=tic;
 while isempty(seriallist) && toc(t)<10
     pause(0.1)
@@ -18,40 +19,41 @@ else
     %9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
     s.ByteOrder = 'bigEndian';
     s.Terminator='';
-    s.InputBufferSize=Cantidad_datos*5e3*2;
+    s.InputBufferSize=Cantidades.datos*5e3*2;
     fopen(s)
-            disp('conectado')    
+    disp('conectado')
 end
 
 %%
-
+% Esta celda sirve para leer los datos del serial y almacenarlos con un
+% timestamp.
 % Recomendación: Leer varias tramas a la vez, si se lee de a una no dan los tiempos.
 clc
 t=tic();
-i=1;err=0;
-while toc(t)<10  
+Datos=[];
+while toc(t)<Cantidades.tiempo
     if s.BytesAvailable>0
-        if s.BytesAvailable>(s.InputBufferSize-Cantidad_datos*2)
-            error('buffer saturado, perdida de datos. Reiniciar la comunicación')            
+        if s.BytesAvailable>(s.InputBufferSize-Cantidades.datos*2)
+           warning('buffer saturado. Se limpia el buffer, hay pérdida de datos.')
+             flushinput(s)
         end
     end
-    if s.BytesAvailable>Cantidad_datos*Cantidad_lectura
-        A = fread(s,Cantidad_datos*Cantidad_lectura,'uint16'); % lee el binario directamente
-        Datos=reshape(A,Cantidad_datos,[]);
-        i=i+1;
-    end
-    
+    if s.BytesAvailable>Cantidades.datos*Cantidades.lectura
+        A = fread(s,Cantidades.datos*Cantidades.lectura,'uint16'); % lee el binario directamente
+        A=sincronismo(s,A,Cantidades);
+        datos=reshape(A,Cantidades.datos,[]);
+        Datos=[Datos datos];       
+    end   
 end
+formato='yyyymmddHHMMSSFFF';
+nombre=datestr(now,formato);
+save(['./' nombre '.mat'],'Datos')
+Datos(:,end)
 disp('listo')
 %%
-s
+% Con esta linea de codigo se cierra el puerto serial.
 try
     fclose(s);
     clear s
 end
 disp('Puerto Cerrado')
-
-%%
-for i=1:size(Datos,2)-1
-    Datos(2,i)-Datos(2,i+1)
-end
